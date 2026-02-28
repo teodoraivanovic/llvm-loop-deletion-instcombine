@@ -1,14 +1,14 @@
-#include <iostream>
-
-int main() {
+int dead_loop_test() {
     int sum = 0;
 
-    for (int i = 0; i < 1000; i++) {
+    // no side effects, finite loop, no live exit values => DELETE - ok
+    for (int i = 0; i < 10; i++) {
         sum += i;
     }
 
-    // 'sum' is never used, so the entire loop is dead code
-    std::cout << "Hello, World!" << std::endl;
+    return 42;
+}
 
-    return 0;
+int main() {
+    return dead_loop_test();
 }
