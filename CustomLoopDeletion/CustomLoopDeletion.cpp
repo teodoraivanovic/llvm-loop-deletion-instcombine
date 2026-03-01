@@ -143,6 +143,7 @@ llvmGetPassPluginInfo() {
                    ArrayRef<PassBuilder::PipelineElement>) {
 
                     if (Name == "custom-loop-deletion") {
+                        errs() << "======================================================================================\n";
                         errs() << "Adding CustomLoopDeletionPass...\n";
                         LPM.addPass(CustomLoopDeletionPass());
                         return true;
