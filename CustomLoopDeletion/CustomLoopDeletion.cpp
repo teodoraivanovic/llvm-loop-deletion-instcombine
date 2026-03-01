@@ -11,6 +11,7 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
+#include "llvm/Analysis/ValueTracking.h"
 
 using namespace llvm;
 
@@ -20,9 +21,9 @@ PreservedAnalyses CustomLoopDeletionPass::run(
     LoopStandardAnalysisResults &AR,
     LPMUpdater &Updater) {
 
-    errs() << "======================================================================================\n";
+    errs() << "===========================================================================================================================================================================\n";
     errs() << "CUSTOM LOOP DELETION PASS RUNNING\n";
-    errs() << "======================================================================================\n";
+    errs() << "===========================================================================================================================================================================\n";
 
     ScalarEvolution &SE = AR.SE;
     LoopInfo &LI = AR.LI;
@@ -30,16 +31,17 @@ PreservedAnalyses CustomLoopDeletionPass::run(
 
     if (!isLoopDead(L, SE)) {
         errs() << "Loop is ALIVE\n";
+        errs() << "===========================================================================================================================================================================\n";
         return PreservedAnalyses::all();
     }
 
     errs() << "Deleting safely...\n";
-	errs() << "======================================================================================\n";
+	errs() << "===========================================================================================================================================================================\n";
 
     // delete the loop safely using llvm's function
+    std::string loopName = L.getName().str();
     deleteDeadLoop(&L, &DT, &SE, &LI, nullptr);
-
-    Updater.markLoopAsDeleted(L, L.getName());
+    Updater.markLoopAsDeleted(L, loopName);
 
     return PreservedAnalyses::none();
 }
@@ -96,6 +98,40 @@ bool CustomLoopDeletionPass::hasSideEffects(Loop &L) {
             if (isa<PHINode>(&I) || isa<BranchInst>(&I))
                 continue;
 
+            if (auto *SI = dyn_cast<StoreInst>(&I)) {
+
+                // volatile stores are ALWAYS side effects
+                if (SI->isVolatile()) {
+                    errs() << "*** Side effect (volatile store): " << I << "\n";
+                    return true;
+                }
+
+                Value *Ptr = SI->getPointerOperand();
+
+                // "underlying object" - separate allocated memory region that a pointer is based on
+                Value *Base = getUnderlyingObject(Ptr);
+
+                // if base is a local alloca => safe
+                if (isa<AllocaInst>(Base)) {
+                    errs() << "*** Has a local store, but values are not used outside of the loop\n";
+                    continue;
+                }
+
+                // if it's not a local store => side effect
+                errs() << "*** Side effect (escaping store): " << I << "\n";
+                return true;
+            }
+
+            // if it's a call, check for side effects
+            if (auto *CI = dyn_cast<CallBase>(&I)) {
+                if (!CI->onlyReadsMemory()) {
+                    errs() << "*** Call with side effects: " << I << "\n";
+                    return true;
+                }
+                continue;
+            }
+
+            // check for any other instruction
             if (I.mayHaveSideEffects()) {
                 errs() << "*** Side effect: " << I << "\n";
                 return true;
@@ -143,7 +179,7 @@ llvmGetPassPluginInfo() {
                    ArrayRef<PassBuilder::PipelineElement>) {
 
                     if (Name == "custom-loop-deletion") {
-                        errs() << "======================================================================================\n";
+                        errs() << "===========================================================================================================================================================================\n";
                         errs() << "Adding CustomLoopDeletionPass...\n";
                         LPM.addPass(CustomLoopDeletionPass());
                         return true;
