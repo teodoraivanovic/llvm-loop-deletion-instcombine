@@ -9,5 +9,5 @@ if [ -z "$CLANG_FORMAT_PATH" ]; then
     exit 1
 fi
 
-find LoopDeletion | grep -E '\.(cpp|hpp)$' | \
+find CustomLoopDeletion | grep -E '\.(cpp|hpp)$' | \
   parallel --jobs "$(nproc)" "clang-format -i"
