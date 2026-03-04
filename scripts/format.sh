@@ -11,3 +11,6 @@ fi
 
 find CustomLoopDeletion | grep -E '\.(cpp|hpp)$' | \
   parallel --jobs "$(nproc)" "clang-format -i"
+
+find MyInstCombine | grep -E '\.(cpp|hpp)$' | \
+  parallel --jobs "$(nproc)" "clang-format -i"
