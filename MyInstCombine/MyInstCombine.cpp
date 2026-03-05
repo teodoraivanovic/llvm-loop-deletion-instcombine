@@ -38,6 +38,10 @@ struct MyInstCombine : public PassInfoMixin<MyInstCombine> {
         if (match(BO, m_Sub(m_Value(X), m_Zero())))
             return replace_instruction(I, X);
 
+        // X - X = 0
+        if (match(BO, m_Sub(m_Value(X), m_Specific(X))))
+            return replace_instruction(I, Constant::getNullValue(I.getType()));
+
         // X * 1 = 1 * X = X
         if (match(BO, m_Mul(m_Value(X), m_One())) ||
             match(BO, m_Mul(m_One(), m_Value(X))))
@@ -48,12 +52,37 @@ struct MyInstCombine : public PassInfoMixin<MyInstCombine> {
             match(BO, m_Mul(m_Zero(), m_Value(X))))
             return replace_instruction(I, Constant::getNullValue(I.getType()));
 
-        // X && 1....1 = 1...1 && X = X
+        return false;
+    }
+
+    static bool logic(Instruction &I) {
+        auto *BO = dyn_cast<BinaryOperator>(&I);
+        if (!BO)
+            return false;
+        Value *X = nullptr;
+
+        // X & X = X | X = X
+        if (match(BO, m_And(m_Value(X), m_Specific(X))) ||
+            match(BO, m_Or(m_Value(X), m_Specific(X))))
+            return replace_instruction(I, X);
+
+        // X & 0 = 0
+        if (match(BO, m_And(m_Value(X), m_Zero())) ||
+            match(BO, m_And(m_Zero(), m_Value(X))))
+            return replace_instruction(I, Constant::getNullValue(I.getType()));
+
+        // X | 1...1 = 1...1
+        if (match(BO, m_Or(m_Value(X), m_AllOnes())) ||
+            match(BO, m_Or(m_AllOnes(), m_Value(X))))
+            return replace_instruction(I,
+                                       Constant::getAllOnesValue(I.getType()));
+
+        // X & 1....1 = 1...1 && X = X
         if (match(BO, m_And(m_Value(X), m_AllOnes())) ||
             match(BO, m_And(m_AllOnes(), m_Value(X))))
             return replace_instruction(I, X);
 
-        // X || 0 = 0 || X = X
+        // X | 0 = 0 | X = X
         if (match(BO, m_Or(m_Value(X), m_Zero())) ||
             match(BO, m_Or(m_Zero(), m_Value(X))))
             return replace_instruction(I, X);
@@ -63,16 +92,15 @@ struct MyInstCombine : public PassInfoMixin<MyInstCombine> {
             match(BO, m_Xor(m_Zero(), m_Value(X))))
             return replace_instruction(I, X);
 
-        // X xor X = X - X = 0
-        if (match(BO, m_Xor(m_Value(X), m_Specific(X))) ||
-            match(BO, m_Sub(m_Value(X), m_Specific(X))))
+        // X xor X = 0
+        if (match(BO, m_Xor(m_Value(X), m_Specific(X))))
             return replace_instruction(I, Constant::getNullValue(I.getType()));
 
         return false;
     }
 
     bool apply(Instruction &I) {
-        auto optimizations = {arithmetic};
+        auto optimizations = {arithmetic, logic};
 
         for (auto &O : optimizations) {
             if (O(I))
