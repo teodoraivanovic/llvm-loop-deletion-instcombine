@@ -1,3 +1,4 @@
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/Pass.h"
 #include "llvm/Passes/PassBuilder.h"
@@ -52,6 +53,11 @@ struct MyInstCombine : public PassInfoMixin<MyInstCombine> {
             match(BO, m_Mul(m_Zero(), m_Value(X))))
             return replace_instruction(I, Constant::getNullValue(I.getType()));
 
+        // X / 1 = X
+        if (match(BO, m_UDiv(m_Value(X), m_One())) ||
+            match(BO, m_SDiv(m_Value(X), m_One())))
+            return replace_instruction(I, X);
+
         return false;
     }
 
@@ -99,8 +105,80 @@ struct MyInstCombine : public PassInfoMixin<MyInstCombine> {
         return false;
     }
 
+    static bool mul_to_left_shift(Instruction &I) {
+        auto *BO = dyn_cast<BinaryOperator>(&I);
+        if (!BO || BO->getOpcode() != Instruction::Mul)
+            return false;
+
+        Value *X = nullptr;
+        ConstantInt *C = nullptr;
+        // Is it X * Const
+        if (!(match(BO, m_Mul(m_Value(X), m_ConstantInt(C))) ||
+              match(BO, m_Mul(m_ConstantInt(C), m_Value(X)))))
+            return false;
+
+        // Not a power of 2
+        if (!C->getValue().isPowerOf2())
+            return false;
+
+        // Leave it for arithmetic
+        if (C->isOne())
+            return false;
+
+        unsigned K = C->getValue().exactLogBase2();
+        IRBuilder<> B(&I);
+        Value *power = ConstantInt::get(X->getType(), K);
+        auto *Shl = B.CreateShl(X, power, "mul2k");
+
+        if (BO->hasNoSignedWrap())
+            cast<BinaryOperator>(Shl)->setHasNoSignedWrap();
+        if (BO->hasNoUnsignedWrap())
+            cast<BinaryOperator>(Shl)->setHasNoUnsignedWrap();
+        return replace_instruction(I, Shl);
+    }
+
+    static bool div_to_right_shift(Instruction &I) {
+        auto *BO = dyn_cast<BinaryOperator>(&I);
+        if (!BO)
+            return false;
+
+        unsigned O = BO->getOpcode();
+        if (O != Instruction::UDiv && O != Instruction::SDiv)
+            return false;
+
+        Value *X = nullptr;
+        ConstantInt *C = nullptr;
+        // Is it X / Const
+        if (!match(BO, m_BinOp(m_Value(X), m_ConstantInt(C))))
+            return false;
+
+        // Not a power of 2
+        if (!C->getValue().isPowerOf2())
+            return false;
+
+        /// Leave it for arithmetic
+        if (C->isOne())
+            return false;
+
+        unsigned K = C->getValue().exactLogBase2();
+        IRBuilder<> B(&I);
+        Value *power = ConstantInt::get(X->getType(), K);
+
+        Value *Result = nullptr;
+        if (O == Instruction::UDiv) {
+            Result = B.CreateLShr(X, power, "udiv2k");
+        } else {
+            if (C->isNegative())
+                return false;
+            Result = B.CreateAShr(X, power, "sdiv2k");
+        }
+
+        return replace_instruction(I, Result);
+    }
+
     bool apply(Instruction &I) {
-        auto optimizations = {arithmetic, logic};
+        auto optimizations = {arithmetic, logic, mul_to_left_shift,
+                              div_to_right_shift};
 
         for (auto &O : optimizations) {
             if (O(I))
