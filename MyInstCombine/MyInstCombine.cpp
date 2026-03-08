@@ -30,9 +30,8 @@ struct MyInstCombine : public PassInfoMixin<MyInstCombine> {
             return false;
         Value *X = nullptr;
 
-        // X + 0 = 0 + X = X
-        if (match(BO, m_Add(m_Value(X), m_Zero())) ||
-            match(BO, m_Add(m_Zero(), m_Value(X))))
+        // X + 0 = X
+        if (match(BO, m_Add(m_Value(X), m_Zero())))
             return replace_instruction(I, X);
 
         // X - 0 = X
@@ -43,14 +42,12 @@ struct MyInstCombine : public PassInfoMixin<MyInstCombine> {
         if (match(BO, m_Sub(m_Value(X), m_Specific(X))))
             return replace_instruction(I, Constant::getNullValue(I.getType()));
 
-        // X * 1 = 1 * X = X
-        if (match(BO, m_Mul(m_Value(X), m_One())) ||
-            match(BO, m_Mul(m_One(), m_Value(X))))
+        // X * 1 = X
+        if (match(BO, m_Mul(m_Value(X), m_One())))
             return replace_instruction(I, X);
 
-        // X * 0 = 0 * X = 0
-        if (match(BO, m_Mul(m_Value(X), m_Zero())) ||
-            match(BO, m_Mul(m_Zero(), m_Value(X))))
+        // X * 0 = 0
+        if (match(BO, m_Mul(m_Value(X), m_Zero())))
             return replace_instruction(I, Constant::getNullValue(I.getType()));
 
         // X / 1 = X
@@ -73,29 +70,24 @@ struct MyInstCombine : public PassInfoMixin<MyInstCombine> {
             return replace_instruction(I, X);
 
         // X & 0 = 0
-        if (match(BO, m_And(m_Value(X), m_Zero())) ||
-            match(BO, m_And(m_Zero(), m_Value(X))))
+        if (match(BO, m_And(m_Value(X), m_Zero())))
             return replace_instruction(I, Constant::getNullValue(I.getType()));
 
         // X | 1...1 = 1...1
-        if (match(BO, m_Or(m_Value(X), m_AllOnes())) ||
-            match(BO, m_Or(m_AllOnes(), m_Value(X))))
+        if (match(BO, m_Or(m_Value(X), m_AllOnes())))
             return replace_instruction(I,
                                        Constant::getAllOnesValue(I.getType()));
 
-        // X & 1....1 = 1...1 && X = X
-        if (match(BO, m_And(m_Value(X), m_AllOnes())) ||
-            match(BO, m_And(m_AllOnes(), m_Value(X))))
+        // X & 1....1 = X
+        if (match(BO, m_And(m_Value(X), m_AllOnes())))
             return replace_instruction(I, X);
 
-        // X | 0 = 0 | X = X
-        if (match(BO, m_Or(m_Value(X), m_Zero())) ||
-            match(BO, m_Or(m_Zero(), m_Value(X))))
+        // X | 0 = X
+        if (match(BO, m_Or(m_Value(X), m_Zero())))
             return replace_instruction(I, X);
 
         // X xor 0 = X
-        if (match(BO, m_Xor(m_Value(X), m_Zero())) ||
-            match(BO, m_Xor(m_Zero(), m_Value(X))))
+        if (match(BO, m_Xor(m_Value(X), m_Zero())))
             return replace_instruction(I, X);
 
         // X xor X = 0
@@ -113,8 +105,7 @@ struct MyInstCombine : public PassInfoMixin<MyInstCombine> {
         Value *X = nullptr;
         ConstantInt *C = nullptr;
         // Is it X * Const
-        if (!(match(BO, m_Mul(m_Value(X), m_ConstantInt(C))) ||
-              match(BO, m_Mul(m_ConstantInt(C), m_Value(X)))))
+        if (!(match(BO, m_Mul(m_Value(X), m_ConstantInt(C)))))
             return false;
 
         // Not a power of 2
@@ -176,8 +167,26 @@ struct MyInstCombine : public PassInfoMixin<MyInstCombine> {
         return replace_instruction(I, Result);
     }
 
+    static bool canonize(Instruction &I) {
+        auto *BO = dyn_cast<BinaryOperator>(&I);
+        if (!BO || !BO->isCommutative())
+            return false;
+
+        Value *Op0 = BO->getOperand(0);
+        Value *Op1 = BO->getOperand(1);
+
+        // If the only constant is left operand then swap
+        if (isa<Constant>(Op0) && !isa<Constant>(Op1)) {
+            BO->setOperand(0, Op1);
+            BO->setOperand(1, Op0);
+            return true;
+        }
+
+        return false;
+    }
+
     bool apply(Instruction &I) {
-        auto optimizations = {arithmetic, logic, mul_to_left_shift,
+        auto optimizations = {canonize, arithmetic, logic, mul_to_left_shift,
                               div_to_right_shift};
 
         for (auto &O : optimizations) {
