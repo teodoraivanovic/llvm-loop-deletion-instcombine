@@ -81,6 +81,36 @@ int foo() {
 
 # InstCombine
 
+InstCombine optimizes mathematical expressions using simple algebra and logic identities.
+
+### Arithmetic
+```
+X + 0 = 0 + X = X
+X - 0 = X
+X - X = 0
+X * 1 = X
+1 * X = X
+X * 0 = 0
+X / 1 = X
+```
+
+### Logic
+```
+X & X = X | X = X
+X & 1...1 = X
+X | 1...1 = 1
+X & 0 = 0
+X | 0 = X
+X xor 0 = X
+X xor X = 0
+```
+
+### 2^k multiplication/division
+```
+X * 2^k = X << k
+X / 2^k = X >> k
+```
+
 # Project Setup & Build
 
 ### Setup
@@ -93,7 +123,7 @@ cd llvm-loop-deletion-instcombine/
 ```
 mkdir -p build/ && cd build/
 cmake ..
-make
+make -j
 ```
 
 ### Build and run all the tests
