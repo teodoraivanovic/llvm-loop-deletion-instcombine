@@ -83,15 +83,27 @@ int foo() {
 
 InstCombine optimizes mathematical expressions using simple algebra and logic identities.
 
+### Canonize
+```
+Commutative(Const, X) -> Commutative(X, Const)
+```
+
 ### Arithmetic
 ```
-X + 0 = 0 + X = X
+X + 0 = X
 X - 0 = X
 X - X = 0
 X * 1 = X
-1 * X = X
 X * 0 = 0
 X / 1 = X
+```
+
+### Negation
+```
+-(-X) = X
+X + (-Y) = X - Y
+X - (-Y) = X + Y
+-(X - Y) = Y - X
 ```
 
 ### Logic
