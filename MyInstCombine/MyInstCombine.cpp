@@ -185,9 +185,39 @@ struct MyInstCombine : public PassInfoMixin<MyInstCombine> {
         return false;
     }
 
+    static bool negation(Instruction &I) {
+        Value *X = nullptr;
+        Value *Y = nullptr;
+
+        // -(-X) = X
+        if (match(&I, m_Neg(m_Neg(m_Value(X))))) {
+            return replace_instruction(I, X);
+        }
+
+        // X + (-Y) = X - Y
+        if (match(&I, m_Add(m_Value(X), m_Neg(m_Value(Y))))) {
+            IRBuilder<> B(&I);
+            return replace_instruction(I, B.CreateSub(X, Y));
+        }
+
+        // X - (-Y) -> X + Y
+        if (match(&I, m_Sub(m_Value(X), m_Neg(m_Value(Y))))) {
+            IRBuilder<> B(&I);
+            return replace_instruction(I, B.CreateAdd(X, Y));
+        }
+
+        // -(X - Y) -> Y - X
+        if (match(&I, m_Neg(m_Sub(m_Value(X), m_Value(Y))))) {
+            IRBuilder<> B(&I);
+            return replace_instruction(I, B.CreateSub(Y, X));
+        }
+
+        return false;
+    }
+
     bool apply(Instruction &I) {
-        auto optimizations = {canonize, arithmetic, logic, mul_to_left_shift,
-                              div_to_right_shift};
+        auto optimizations = {canonize, negation,          arithmetic,
+                              logic,    mul_to_left_shift, div_to_right_shift};
 
         for (auto &O : optimizations) {
             if (O(I))

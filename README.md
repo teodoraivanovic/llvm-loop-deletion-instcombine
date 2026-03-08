@@ -98,6 +98,14 @@ X * 0 = 0
 X / 1 = X
 ```
 
+### Negation
+```
+-(-X) = X
+X + (-Y) = X - Y
+X - (-Y) = X + Y
+-(X - Y) = Y - X
+```
+
 ### Logic
 ```
 X & X = X | X = X
