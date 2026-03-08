@@ -7,9 +7,9 @@ echo "Where is your LLVM opt?"
 read opt
 
 # Fresh build
-rm -rf ../build/
-mkdir ../build
-cd ../build
+rm -rf build
+mkdir build
+cd build
 cmake ..
 make -j
 
